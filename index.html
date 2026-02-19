@@ -1,0 +1,368 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreshAI - Food Quality Detector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        
+        .upload-area {
+            border: 2px dashed #ccc;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #60a5fa;
+            background-color: rgba(96, 165, 250, 0.1);
+        }
+        
+        .processing-spinner {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .fresh-badge {
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+        }
+        
+        .rotten-badge {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+        }
+        
+        .confidence-meter {
+            height: 8px;
+            border-radius: 4px;
+            background: #e5e7eb;
+            overflow: hidden;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <div class="flex justify-center items-center mb-4">
+                <i class="fas fa-leaf text-green-500 text-4xl mr-3"></i>
+                <h1 class="text-4xl font-bold text-gray-800">FreshAI</h1>
+            </div>
+            <p class="text-lg text-gray-600 max-w-2xl mx-auto">
+                AI-powered freshness detection for fruits and vegetables
+            </p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex flex-col lg:flex-row gap-8">
+            <!-- Upload Section -->
+            <div class="lg:w-1/2 bg-white rounded-xl shadow-lg overflow-hidden">
+                <div class="p-6">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-6">Upload Your Produce</h2>
+                    
+                    <div id="uploadArea" class="upload-area rounded-lg p-8 text-center cursor-pointer mb-6">
+                        <input type="file" id="fileInput" accept="image/*" class="hidden">
+                        <div class="flex flex-col items-center justify-center">
+                            <i class="fas fa-cloud-upload-alt text-blue-400 text-5xl mb-4"></i>
+                            <h3 class="text-xl font-medium text-gray-700 mb-2">Drag & Drop Image Here</h3>
+                            <p class="text-gray-500 mb-4">or click to select file</p>
+                            <button id="uploadBtn" class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition duration-200">
+                                Browse Files
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="border-t pt-4">
+                        <h3 class="text-lg font-medium text-gray-700 mb-3">For Best Results:</h3>
+                        <ul class="list-disc list-inside text-gray-600 space-y-1">
+                            <li>Use well-lit, close-up photos</li>
+                            <li>Focus on one type of produce per image</li>
+                            <li>Ensure the entire item is visible</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div id="previewContainer" class="hidden p-6 border-t">
+                    <h3 class="text-lg font-medium text-gray-700 mb-3">Preview</h3>
+                    <div class="relative">
+                        <img id="imagePreview" src="" alt="Preview" class="rounded-lg w-full h-auto max-h-64 object-contain">
+                        <div id="processingOverlay" class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden rounded-lg">
+                            <div class="text-center">
+                                <div class="processing-spinner text-white text-4xl mb-2">
+                                    <i class="fas fa-circle-notch"></i>
+                                </div>
+                                <p class="text-white font-medium">Analyzing your produce...</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="newUploadBtn" class="mt-4 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-gray-700 hidden">
+                        <i class="fas fa-sync-alt mr-2"></i>Upload New Image
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Results Section -->
+            <div class="lg:w-1/2" id="resultsColumn">
+                <div id="defaultResults" class="bg-white rounded-xl shadow-lg p-6 h-full flex items-center justify-center">
+                    <div class="text-center">
+                        <i class="fas fa-apple-alt text-gray-300 text-6xl mb-4"></i>
+                        <h3 class="text-xl font-medium text-gray-700 mb-2">Rotten</h3>
+                        <p class="text-gray-500">NOT Freshness</p>
+                    </div>
+                </div>
+                
+                <div id="resultsContainer" class="hidden bg-white rounded-xl shadow-lg overflow-hidden">
+                    <div class="p-6">
+                        <h2 class="text-2xl font-semibold text-gray-800 mb-6">Analysis Results</h2>
+                        
+                        <div class="flex items-center mb-6">
+                            <span id="freshnessBadge" class="fresh-badge text-white text-sm font-medium px-3 py-1 rounded-full"></span>
+                            <span id="confidenceText" class="ml-auto text-sm text-gray-600"></span>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Produce Details</h4>
+                            <div class="flex items-center">
+                                <div id="produceIcon" class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mr-3">
+                                    <i class="fas fa-question text-gray-500"></i>
+                                </div>
+                                <div>
+                                    <p id="produceName" class="font-medium text-gray-800"></p>
+                                    <p id="produceScientific" class="text-sm text-gray-500"></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-6">
+                            <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Key Indicators</h4>
+                            <ul id="keyIndicators" class="space-y-2">
+                                <!-- Filled dynamically -->
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Recommendation</h4>
+                            <p id="recommendationText" class="text-gray-700"></p>
+                        </div>
+                    </div>
+                    
+                    <div class="border-t p-6 bg-gray-50">
+                        <button id="saveResultBtn" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg mr-3">
+                            <i class="fas fa-save mr-2"></i>Save Result
+                        </button>
+                        <button id="newAnalysisBtn" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg">
+                            <i class="fas fa-redo mr-2"></i>New Analysis
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- How It Works Section -->
+        <div class="mt-12 bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6">How It Works</h2>
+            
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="bg-gray-50 p-6 rounded-lg hover:bg-gray-100 transition duration-200">
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                        <i class="fas fa-camera text-blue-500 text-xl"></i>
+                    </div>
+                    <h3 class="font-medium text-lg text-gray-800 mb-2">1. Capture Image</h3>
+                    <p class="text-gray-600">Take a photo of your fruit or vegetable</p>
+                </div>
+                
+                <div class="bg-gray-50 p-6 rounded-lg hover:bg-gray-100 transition duration-200">
+                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+                        <i class="fas fa-brain text-purple-500 text-xl"></i>
+                    </div>
+                    <h3 class="font-medium text-lg text-gray-800 mb-2">2. AI Analysis</h3>
+                    <p class="text-gray-600">Our model examines visual indicators of freshness</p>
+                </div>
+                
+                <div class="bg-gray-50 p-6 rounded-lg hover:bg-gray-100 transition duration-200">
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                        <i class="fas fa-chart-bar text-green-500 text-xl"></i>
+                    </div>
+                    <h3 class="font-medium text-lg text-gray-800 mb-2">3. Get Results</h3>
+                    <p class="text-gray-600">Receive detailed freshness assessment</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <footer class="mt-12 text-center py-6 border-t border-gray-200">
+            <p class="text-gray-600">© 2025 FreshAI - AI-Powered Food Quality Detection</p>
+            <div class="flex justify-center space-x-4 mt-3">
+                <a href="#" class="text-gray-500 hover:text-blue-600"><i class="fab fa-github"></i></a>
+                <a href="#" class="text-gray-500 hover:text-blue-400"><i class="fab fa-twitter"></i></a>
+                <a href="#" class="text-gray-500 hover:text-red-600"><i class="fab fa-youtube"></i></a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadArea = document.getElementById('uploadArea');
+        const previewContainer = document.getElementById('previewContainer');
+        const imagePreview = document.getElementById('imagePreview');
+        const processingOverlay = document.getElementById('processingOverlay');
+        const defaultResults = document.getElementById('defaultResults');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const newUploadBtn = document.getElementById('newUploadBtn');
+        const newAnalysisBtn = document.getElementById('newAnalysisBtn');
+        const saveResultBtn = document.getElementById('saveResultBtn');
+
+        // Event Listeners
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+        newUploadBtn.addEventListener('click', resetFileInput);
+        newAnalysisBtn.addEventListener('click', resetAnalysis);
+        
+        // Drag and Drop Events
+        ['dragenter', 'dragover'].forEach(event => {
+            uploadArea.addEventListener(event, highlightUploadArea);
+        });
+        
+        ['dragleave', 'drop'].forEach(event => {
+            uploadArea.addEventListener(event, unhighlightUploadArea);
+        });
+        
+        uploadArea.addEventListener('drop', handleDrop);
+
+        // Functions
+        function highlightUploadArea(e) {
+            e.preventDefault();
+            uploadArea.classList.add('border-blue-400', 'bg-blue-50');
+        }
+        
+        function unhighlightUploadArea(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('border-blue-400', 'bg-blue-50');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect({ target: { files: files } });
+            }
+        }
+        
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            if (!file.type.match('image.*')) {
+                alert('Please select an image file (JPEG, PNG)');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imagePreview.src = e.target.result;
+                previewContainer.classList.remove('hidden');
+                uploadArea.classList.add('hidden');
+                newUploadBtn.classList.remove('hidden');
+                processImage(file);
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        async function processImage(file) {
+    const processingOverlay = document.getElementById('processingOverlay');
+    processingOverlay.classList.remove('hidden');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('http://localhost:5000/predict', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+        updateResults(result);
+    } catch (error) {
+        console.error("Error:", error);
+        alert("Backend connection failed. Using mock data.");
+        updateResults({
+            status: Math.random() > 0.5 ? "Fresh" : "Rotten",
+            confidence: Math.random().toFixed(2),
+            produce: ["Apple", "Banana", "Tomato"][Math.floor(Math.random() * 3)],
+            indicators: ["Color: Bright", "No bruises"]
+        });
+    } finally {
+        processingOverlay.classList.add('hidden');
+    }
+}
+
+        function updateResults(data) {
+            // Update freshness badge
+            const freshnessBadge = document.getElementById('freshnessBadge');
+            freshnessBadge.textContent = data.status;
+            freshnessBadge.className = data.status === "Fresh" ? 
+                'fresh-badge text-white text-sm font-medium px-3 py-1 rounded-full' : 
+                'rotten-badge text-white text-sm font-medium px-3 py-1 rounded-full';
+            
+            // Update confidence
+            document.getElementById('confidenceText').textContent = `${(data.confidence * 100).toFixed(0)}% confidence`;
+            
+            // Update produce info
+            document.getElementById('produceName').textContent = data.produce;
+            document.getElementById('produceScientific').textContent = data.scientific;
+            
+            const produceIcon = document.getElementById('produceIcon');
+            produceIcon.innerHTML = `<i class="fas fa-${data.icon} text-gray-500"></i>`;
+            
+            // Update indicators
+            const indicatorsList = document.getElementById('keyIndicators');
+            indicatorsList.innerHTML = data.indicators.map(indicator => 
+                `<li class="flex items-start">
+                    <i class="fas fa-check-circle text-green-500 mt-1 mr-2"></i>
+                    <span>${indicator}</span>
+                </li>`
+            ).join('');
+            
+            // Update recommendation
+            document.getElementById('recommendationText').textContent = data.recommendation;
+        }
+        
+        function resetFileInput() {
+            fileInput.value = '';
+            previewContainer.classList.add('hidden');
+            uploadArea.classList.remove('hidden');
+            newUploadBtn.classList.add('hidden');
+        }
+        
+        function resetAnalysis() {
+            fileInput.value = '';
+            previewContainer.classList.add('hidden');
+            uploadArea.classList.remove('hidden');
+            resultsContainer.classList.add('hidden');
+            defaultResults.classList.remove('hidden');
+            newUploadBtn.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
